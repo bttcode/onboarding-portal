@@ -1,0 +1,9 @@
+# Public URLs of the two routes. Fill these in after the first `oc apply -k openshift/`
+# (oc get routes), then apply again and restart the deployments.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: onboarding-config
+data:
+  KEYCLOAK_PUBLIC_URL: https://keycloak-CHANGE-ME.apps.sandbox.openshiftapps.com
+  FRONTEND_PUBLIC_URL: https://portal-CHANGE-ME.apps.sandbox.openshiftapps.com

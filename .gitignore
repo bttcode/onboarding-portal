@@ -1,0 +1,24 @@
+# Java
+target/
+*.class
+
+# Angular
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+# generated from api/openapi.yaml on every build
+frontend/src/app/api/
+
+# IDEs and OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# local secrets
+.env
+openshift/secret.yaml
+
+# portable JDK / PostgreSQL / Keycloak for running without Docker
+.tools/

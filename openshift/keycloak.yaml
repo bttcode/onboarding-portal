@@ -1,0 +1,83 @@
+# Demo setup: Keycloak in dev mode with its embedded database, realm imported from a ConfigMap:
+#   oc create configmap onboarding-realm --from-file=keycloak/onboarding-realm.json
+# Add the frontend route URL to the client's redirect URIs first (see docs/DEPLOYMENT.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:25.0.6
+          args: ["start-dev", "--import-realm"]
+          ports:
+            - containerPort: 8080
+          env:
+            - name: KEYCLOAK_ADMIN
+              value: admin
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: onboarding-secrets
+                  key: KEYCLOAK_ADMIN_PASSWORD
+            - name: KC_HOSTNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: onboarding-config
+                  key: KEYCLOAK_PUBLIC_URL
+            - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HTTP_ENABLED
+              value: "true"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+      volumes:
+        - name: realm
+          configMap:
+            name: onboarding-realm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+spec:
+  selector:
+    app: keycloak
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: keycloak
+spec:
+  to:
+    kind: Service
+    name: keycloak
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

@@ -1,0 +1,454 @@
+openapi: 3.0.3
+info:
+  title: Onboarding Portal API
+  version: 0.1.0
+  description: |
+    Contract for the client-onboarding portal. The Spring Boot server interfaces and the typed
+    Angular client are both generated from this file, so it is the single source of truth for
+    the API. Change the contract first, then regenerate both sides.
+tags:
+  - name: Applications
+    description: Onboarding applications, review decisions and supporting documents
+security:
+  - bearerAuth: []
+
+paths:
+  /api/applications:
+    post:
+      tags: [Applications]
+      operationId: createApplication
+      summary: Submit a new onboarding application
+      description: Applicant only. The background check is queued through the transactional outbox.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicantData'
+      responses:
+        '201':
+          description: Application submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      tags: [Applications]
+      operationId: searchApplications
+      summary: Search the review queue with server-side paging and sorting
+      description: Caseworker only.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ApplicationStatus'
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive match on first name, last name or email.
+          schema:
+            type: string
+            maxLength: 100
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort
+          in: query
+          required: false
+          description: "Sort field and direction, e.g. `submittedAt,asc`. Fields: submittedAt, lastName, status."
+          schema:
+            type: string
+            pattern: '^(submittedAt|lastName|status),(asc|desc)$'
+            default: 'submittedAt,asc'
+      responses:
+        '200':
+          description: One page of applications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/applications/mine:
+    get:
+      tags: [Applications]
+      operationId: listMyApplications
+      summary: List the current applicant's applications, newest first
+      responses:
+        '200':
+          description: The applicant's applications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApplicationSummary'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/applications/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    get:
+      tags: [Applications]
+      operationId: getApplication
+      summary: Get one application
+      description: Caseworkers can read every application, applicants only their own.
+      responses:
+        '200':
+          description: The application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/applications/{id}/decisions:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    post:
+      tags: [Applications]
+      operationId: decideApplication
+      summary: Approve or reject an application (four-eyes principle)
+      description: |
+        Caseworker only. An approval needs `requiredApprovals` distinct caseworkers; a single
+        rejection closes the application. Approving an application with a background-check hit
+        requires a justification comment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: The application after the decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/applications/{id}/check/retry:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    post:
+      tags: [Applications]
+      operationId: retryCheck
+      summary: Queue a failed background check again
+      description: Caseworker only. Allowed only when the check status is ERROR.
+      responses:
+        '200':
+          description: The application with the check queued again
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationDetail'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/applications/{id}/document:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    put:
+      tags: [Applications]
+      operationId: uploadDocument
+      summary: Upload or replace the supporting document (PDF, PNG or JPEG, max 5 MB)
+      description: Applicant only, on their own application, before a final decision.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '204':
+          description: Document stored
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      tags: [Applications]
+      operationId: downloadDocument
+      summary: Download the supporting document
+      responses:
+        '200':
+          description: The document. The real media type is sent in the Content-Type header.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ApplicationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: The request is invalid
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: The caller does not have the required role
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: The application does not exist or is not visible to the caller
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: A business rule prevents the operation
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Product:
+      type: string
+      enum: [LIFE, HOUSEHOLD, LIABILITY]
+
+    ApplicationStatus:
+      type: string
+      enum: [SUBMITTED, IN_REVIEW, APPROVED, REJECTED]
+
+    CheckStatus:
+      type: string
+      description: |
+        PENDING: queued or in progress. CLEAR / HIT: result of the background check.
+        ERROR: the check service failed too often; a caseworker can retry it.
+      enum: [PENDING, CLEAR, HIT, ERROR]
+
+    DecisionType:
+      type: string
+      enum: [APPROVE, REJECT]
+
+    ApplicantData:
+      type: object
+      required: [firstName, lastName, email, birthDate, nationality, street, postalCode, city, product, startDate]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        birthDate:
+          type: string
+          format: date
+          description: The applicant must be at least 18 years old.
+        nationality:
+          type: string
+          description: ISO 3166-1 alpha-2 country code
+          pattern: '^[A-Z]{2}$'
+        street:
+          type: string
+          minLength: 1
+          maxLength: 200
+        postalCode:
+          type: string
+          description: Swiss postal code
+          pattern: '^[1-9][0-9]{3}$'
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+        product:
+          $ref: '#/components/schemas/Product'
+        startDate:
+          type: string
+          format: date
+          description: Requested insurance start, today or later.
+
+    CheckResult:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/CheckStatus'
+        reference:
+          type: string
+        checkedAt:
+          type: string
+          format: date-time
+
+    Decision:
+      type: object
+      required: [caseworker, decision, decidedAt]
+      properties:
+        caseworker:
+          type: string
+        decision:
+          $ref: '#/components/schemas/DecisionType'
+        comment:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+
+    DecisionRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          $ref: '#/components/schemas/DecisionType'
+        comment:
+          type: string
+          maxLength: 1000
+
+    ApplicationSummary:
+      type: object
+      required: [id, applicantName, product, status, checkStatus, submittedAt, approvals, hasDocument]
+      properties:
+        id:
+          type: string
+          format: uuid
+        applicantName:
+          type: string
+        product:
+          $ref: '#/components/schemas/Product'
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        checkStatus:
+          $ref: '#/components/schemas/CheckStatus'
+        submittedAt:
+          type: string
+          format: date-time
+        approvals:
+          type: integer
+          format: int32
+        hasDocument:
+          type: boolean
+
+    ApplicationDetail:
+      type: object
+      required: [id, status, submittedAt, applicant, check, decisions, requiredApprovals]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        submittedAt:
+          type: string
+          format: date-time
+        applicant:
+          $ref: '#/components/schemas/ApplicantData'
+        check:
+          $ref: '#/components/schemas/CheckResult'
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Decision'
+        requiredApprovals:
+          type: integer
+          format: int32
+        documentName:
+          type: string
+
+    ApplicationPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplicationSummary'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+          format: int32
+
+    Problem:
+      type: object
+      description: RFC 9457 problem details
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        code:
+          type: string
+          description: Machine-readable business-rule code, for 409 responses

@@ -1,0 +1,45 @@
+# Internal only: no Route, so the chaos endpoints are reachable only from inside the namespace
+# (oc port-forward svc/sanctions-mock 8090 for a demo).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sanctions-mock
+  labels:
+    app: sanctions-mock
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sanctions-mock
+  template:
+    metadata:
+      labels:
+        app: sanctions-mock
+    spec:
+      containers:
+        - name: sanctions-mock
+          image: ghcr.io/bttcode/onboarding-sanctions-mock:latest
+          ports:
+            - containerPort: 8090
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8090
+            initialDelaySeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 384Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sanctions-mock
+spec:
+  selector:
+    app: sanctions-mock
+  ports:
+    - port: 8090
+      targetPort: 8090

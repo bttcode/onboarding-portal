@@ -1,0 +1,17 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: sanctions-mock
+
+sanctions-mock:
+  listed-last-names:
+    - Blocked
+    - Sanctioned
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

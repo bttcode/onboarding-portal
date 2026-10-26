@@ -1,0 +1,73 @@
+# Red Hat's PostgreSQL image runs under OpenShift's random user id, unlike the Docker Hub image.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: quay.io/sclorg/postgresql-16-c9s:latest
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRESQL_DATABASE
+              value: onboarding
+            - name: POSTGRESQL_USER
+              value: onboarding
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: onboarding-secrets
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            exec:
+              command: ["/usr/libexec/check-container"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/pgsql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

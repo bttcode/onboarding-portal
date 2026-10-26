@@ -1,0 +1,93 @@
+server:
+  port: 8080
+  # trust X-Forwarded-* from the nginx / OpenShift router in front of the API
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: onboarding-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/onboarding}
+    username: ${DB_USER:onboarding}
+    password: ${DB_PASSWORD:onboarding-dev}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Liquibase owns the schema
+      ddl-auto: none
+    properties:
+      hibernate:
+        default_batch_fetch_size: 50
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+  mvc:
+    problemdetails:
+      enabled: true
+
+onboarding:
+  required-approvals: 2
+  outbox:
+    enabled: true
+    poll-interval-ms: 2000
+    batch-size: 10
+    max-attempts: 8
+    base-backoff: 5s
+    max-backoff: 5m
+  sanctions:
+    base-url: ${SANCTIONS_BASE_URL:http://localhost:8090}
+    connect-timeout: 2s
+    read-timeout: 3s
+  security:
+    # the issuer as the browser sees it (it is part of every token)
+    issuer-uri: ${OIDC_ISSUER_URI:http://localhost:8180/realms/onboarding}
+    # where this service fetches the signing keys (may be an internal address)
+    jwk-set-uri: ${OIDC_JWK_SET_URI:http://localhost:8180/realms/onboarding/protocol/openid-connect/certs}
+    audience: onboarding-api
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+  upload:
+    max-bytes: 5242880
+
+resilience4j:
+  retry:
+    instances:
+      sanctions:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+        ignore-exceptions:
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+  circuitbreaker:
+    instances:
+      sanctions:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+        register-health-indicator: true
+        record-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,circuitbreakers,circuitbreakerevents,retryevents
+  endpoint:
+    health:
+      show-details: when-authorized
+      roles: caseworker
+  health:
+    circuitbreakers:
+      enabled: true

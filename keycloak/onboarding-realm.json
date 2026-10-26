@@ -1,0 +1,90 @@
+{
+  "realm": "onboarding",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": false,
+  "loginWithEmailAllowed": true,
+  "resetPasswordAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "roles": {
+    "realm": [
+      { "name": "applicant", "description": "Can submit and follow their own applications" },
+      { "name": "caseworker", "description": "Can review and decide applications" },
+      { "name": "offline_access", "description": "Keycloak built-in: offline tokens" },
+      { "name": "uma_authorization", "description": "Keycloak built-in: user-managed access" },
+      {
+        "name": "default-roles-onboarding",
+        "description": "Given to every new user, including self-registered ones",
+        "composite": true,
+        "composites": { "realm": ["applicant", "offline_access", "uma_authorization"] }
+      }
+    ]
+  },
+  "defaultRole": { "name": "default-roles-onboarding" },
+  "clients": [
+    {
+      "clientId": "onboarding-portal",
+      "name": "Onboarding Portal (Angular SPA)",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:4200/*", "http://localhost:8081/*"],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "protocolMappers": [
+        {
+          "name": "onboarding-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "onboarding-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Applicant",
+      "credentials": [{ "type": "password", "value": "alice", "temporary": false }],
+      "realmRoles": ["default-roles-onboarding"]
+    },
+    {
+      "username": "carol",
+      "enabled": true,
+      "email": "carol@example.com",
+      "emailVerified": true,
+      "firstName": "Carol",
+      "lastName": "Caseworker",
+      "credentials": [{ "type": "password", "value": "carol", "temporary": false }],
+      "realmRoles": ["caseworker"]
+    },
+    {
+      "username": "dave",
+      "enabled": true,
+      "email": "dave@example.com",
+      "emailVerified": true,
+      "firstName": "Dave",
+      "lastName": "Caseworker",
+      "credentials": [{ "type": "password", "value": "dave", "temporary": false }],
+      "realmRoles": ["caseworker"]
+    }
+  ]
+}

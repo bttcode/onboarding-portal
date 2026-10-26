@@ -1,0 +1,109 @@
+<section class="page">
+  <a mat-button routerLink="/review">← Back to the queue</a>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+  @if (error(); as message) {
+    <p class="error-banner" role="alert">{{ message }}</p>
+  }
+
+  @if (application(); as app) {
+    <h1 class="page-title">{{ app.applicant.firstName }} {{ app.applicant.lastName }}</h1>
+    <p class="page-subtitle">
+      <app-status-chip [status]="app.status" /> Submitted {{ app.submittedAt | date: 'medium' }}
+    </p>
+
+    <div class="layout">
+      <mat-card>
+        <mat-card-header><mat-card-title>Applicant</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <dl class="details">
+            <dt>Email</dt>
+            <dd>{{ app.applicant.email }}</dd>
+            <dt>Date of birth</dt>
+            <dd>{{ app.applicant.birthDate | date: 'longDate' }}</dd>
+            <dt>Nationality</dt>
+            <dd>{{ nationality() }}</dd>
+            <dt>Address</dt>
+            <dd>{{ app.applicant.street }}, {{ app.applicant.postalCode }} {{ app.applicant.city }}</dd>
+            <dt>Product</dt>
+            <dd>{{ productLabels[app.applicant.product] }}</dd>
+            <dt>Start date</dt>
+            <dd>{{ app.applicant.startDate | date: 'longDate' }}</dd>
+            <dt>Document</dt>
+            <dd>
+              @if (app.documentName) {
+                <button mat-stroked-button type="button" (click)="downloadDocument()" [disabled]="busy()">
+                  Download {{ app.documentName }}
+                </button>
+              } @else {
+                <span class="muted">Not uploaded</span>
+              }
+            </dd>
+          </dl>
+        </mat-card-content>
+      </mat-card>
+
+      <div class="side">
+        <mat-card>
+          <mat-card-header><mat-card-title>Background check</mat-card-title></mat-card-header>
+          <mat-card-content>
+            <p><app-status-chip [status]="app.check.status" /></p>
+            @if (app.check.reference) {
+              <p class="muted">Reference {{ app.check.reference }}, {{ app.check.checkedAt | date: 'short' }}</p>
+            }
+            @if (app.check.status === 'PENDING') {
+              <p class="muted">The check is running. The application can be reviewed once it is done.</p>
+            }
+            @if (app.check.status === 'ERROR') {
+              <p class="muted">The check service did not answer after several attempts.</p>
+              <button mat-stroked-button type="button" (click)="retryCheck()" [disabled]="busy()">Retry check</button>
+            }
+          </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+          <mat-card-header>
+            <mat-card-title>Decisions</mat-card-title>
+            <mat-card-subtitle>{{ approvals() }} of {{ app.requiredApprovals }} approvals</mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            @for (decision of app.decisions; track decision.caseworker) {
+              <div class="decision">
+                <strong>{{ decision.decision === 'APPROVE' ? 'Approved' : 'Rejected' }}</strong>
+                by {{ decision.caseworker }}, {{ decision.decidedAt | date: 'short' }}
+                @if (decision.comment) {
+                  <div class="muted">“{{ decision.comment }}”</div>
+                }
+              </div>
+            } @empty {
+              <p class="muted">No decisions yet.</p>
+            }
+
+            @if (canDecide()) {
+              @if (app.check.status === 'HIT') {
+                <p class="warning">The background check found a match. Explain your decision in the comment.</p>
+              }
+              <mat-form-field class="comment">
+                <mat-label>Comment</mat-label>
+                <textarea matInput rows="3" [formControl]="comment"></textarea>
+                <mat-hint align="end">{{ comment.value.length }} / 1000</mat-hint>
+              </mat-form-field>
+              <div class="actions">
+                <button mat-stroked-button type="button" (click)="decide('REJECT')" [disabled]="busy() || comment.invalid">
+                  Reject
+                </button>
+                <button mat-flat-button type="button" (click)="decide('APPROVE')" [disabled]="busy() || comment.invalid">
+                  Approve
+                </button>
+              </div>
+            } @else if (alreadyDecidedByMe() && app.status === 'IN_REVIEW') {
+              <p class="muted">You have decided. A second caseworker must review this application.</p>
+            }
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </div>
+  }
+</section>
